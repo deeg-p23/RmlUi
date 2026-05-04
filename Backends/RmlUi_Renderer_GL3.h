@@ -76,6 +76,8 @@ public:
 	const Rml::Matrix4f& GetTransform() const;
 	void ResetProgram();
 
+	void RegisterCustomShader(const Rml::String& name, unsigned int program);
+
 private:
 	void UseProgram(ProgramId program_id);
 	int GetUniformLocation(UniformId uniform_id) const;
@@ -115,6 +117,8 @@ private:
 	    Layers can be pushed and popped, creating new framebuffers as needed. Typically, geometry is rendered to the top
 	    layer. The layer framebuffers may have MSAA enabled.
 
+
+	    void RegisterCustomShader(const Rml::String& name, unsigned int program);
 	    Postprocessing framebuffers are separate from the layers, and are commonly used to apply texture-wide effects
 	    such as filters. They are used both as input and output during rendering, and do not use MSAA.
 	*/
@@ -194,6 +198,8 @@ private:
 		Stencil stencil_back;
 	};
 	GLStateBackup glstate_backup = {};
+
+	Rml::UnorderedMap<Rml::String, unsigned int> custom_shader_programs;
 };
 
 /**

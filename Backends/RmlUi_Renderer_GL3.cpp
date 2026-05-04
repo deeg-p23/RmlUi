@@ -1607,7 +1607,7 @@ void RenderInterface_GL3::ReleaseFilter(Rml::CompiledFilterHandle filter)
 	delete reinterpret_cast<CompiledFilter*>(filter);
 }
 
-enum class CompiledShaderType { Invalid = 0, Gradient, Creation };
+enum class CompiledShaderType { Invalid = 0, Gradient, Creation, Custom };
 struct CompiledShader {
 	CompiledShaderType type;
 
@@ -1620,6 +1620,8 @@ struct CompiledShader {
 
 	// Shader
 	Rml::Vector2f dimensions;
+
+	unsigned int custom_program = 0;
 };
 
 Rml::CompiledShaderHandle RenderInterface_GL3::CompileShader(const Rml::String& name, const Rml::Dictionary& parameters)
@@ -1679,6 +1681,15 @@ Rml::CompiledShaderHandle RenderInterface_GL3::CompileShader(const Rml::String& 
 			shader.type = CompiledShaderType::Creation;
 			shader.dimensions = Rml::Get(parameters, "dimensions", Rml::Vector2f(0.f));
 		}
+		else
+		{
+			// look for user-registered shader
+			if (custom_shader_programs.count(value))
+			{
+				shader.type = CompiledShaderType::Custom;
+				shader.custom_program = custom_shader_programs.at(value);
+			}
+		}
 	}
 
 	if (shader.type != CompiledShaderType::Invalid)
@@ -1731,6 +1742,29 @@ void RenderInterface_GL3::RenderShader(Rml::CompiledShaderHandle shader_handle, 
 		glBindVertexArray(0);
 	}
 	break;
+	case CompiledShaderType::Custom:
+	{
+		RMLUI_ASSERT(shader.custom_program != 0);
+		const double time = Rml::GetSystemInterface()->GetElapsedTime();
+
+		glUseProgram(shader.custom_program);
+
+		// set pos uniforms
+		const GLint transformLoc = glGetUniformLocation(shader.custom_program, "_transform");
+		const GLint translateLoc = glGetUniformLocation(shader.custom_program, "_translate");
+		const GLint timeLoc = glGetUniformLocation(shader.custom_program, "_value");
+
+		if (transformLoc >= 0) glUniformMatrix4fv(transformLoc, 1, GL_FALSE, transform.data());
+		if (translateLoc >= 0) glUniform2f(translateLoc, translation.x, translation.y);
+		if (timeLoc >= 0) glUniform1f(timeLoc, (float)time);
+
+		glBindVertexArray(geometry.vao);
+		glDrawElements(GL_TRIANGLES, geometry.draw_count, GL_UNSIGNED_INT, (const GLvoid*)0);
+		glBindVertexArray(0);
+
+		active_program = ProgramId::None;
+	}
+	break;
 	case CompiledShaderType::Invalid:
 	{
 		Rml::Log::Message(Rml::Log::LT_WARNING, "Unhandled render shader %d.", (int)type);
@@ -1739,6 +1773,11 @@ void RenderInterface_GL3::RenderShader(Rml::CompiledShaderHandle shader_handle, 
 	}
 
 	Gfx::CheckGLError("RenderShader");
+}
+
+void RenderInterface_GL3::RegisterCustomShader(const Rml::String& name, unsigned int program)
+{
+	custom_shader_programs[name] = program;
 }
 
 void RenderInterface_GL3::ReleaseShader(Rml::CompiledShaderHandle shader_handle)
